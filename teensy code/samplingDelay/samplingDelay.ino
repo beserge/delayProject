@@ -29,13 +29,13 @@ const short int delayMax = 15000;
 short int sampleBuffer [delayMax];
 float delayBuffer[delayMax];
 short int delayNum = 0;
-short int delayRate = 0;
+short int delayRate = 1;
 bool sampleBool = false;
 short int sampleNum = 0;
 short int sampleLen = delayMax;
-short int outputBuffer[256];
+short int outputBuffer[128];
 float sub = 0;
-float knockDown = -.2;
+float knockDown = 0;
 
 bool resetBool = false;
 
@@ -56,6 +56,7 @@ void setup() {
   pinMode(resetButton, INPUT);
 
   outputTimer.begin(outInterrupt, 45.334);
+  //outputTimer.begin(outInterrupt, 22.667);
   inputTimer.begin(inInterrupt, 400);
 
   adc->setConversionSpeed(ADC_CONVERSION_SPEED::HIGH_SPEED);
@@ -76,13 +77,12 @@ void setup() {
 void outInterrupt() {
   cli();
   //adc->adc0->readSingle();
-  input = (adc->analogRead(A2)) * 2;
-  if (counter == 128) {
+  input = (adc->analogRead(A2));
+  if (counter >= 128) {
     getNextOutputBlock();
     counter = 0;
   }
   outputBuffer[counter] = input;
-  outputBuffer[counter + 1] = input;
   counter += 2;
   sei();
 }
@@ -90,32 +90,31 @@ void outInterrupt() {
 void inInterrupt() {
   //Note: pins A7 and A6 are used by DAC
   //aka 20 and 21
-  feedback = ((float)(adc->analogRead(A5)) / 3350);
-  delayRate = map(adc->analogRead (A4), 0, 8535, 1, 35);
-  samplerate = map(adc->analogRead (A9), 0, 8535, 1, 18);
+  feedback = ((float)(adc->analogRead(A5)) / 2050);
+  delayRate = map(adc->analogRead (A4), 0, 8535, 1, 40);
+  samplerate = map(adc->analogRead (A9), 0, 8535, 1, 20);
   sampleBool = digitalRead(sampleButton);
   resetBool = digitalRead(resetButton);
 }
 
 void getNextOutputBlock() {
-
   //quickly update sample and delay buffers, then update output buffer and pass it to DAC
   for (int i = 0; i < 128; i += 2) {
     checkLen();
-    if (sampleNum >= delayMax)
-      sampleNum = sampleNum - delayMax;
+
     short int holdNum = outputBuffer[i];
-    outputBuffer[i] = (outputBuffer[i] + delayBuffer[delayNum]) * 2 + sampleBuffer[sampleNum];
-    //outputBuffer[i] = outputBuffer[i];
+
+    outputBuffer[i] = outputBuffer[i] / 4 + delayBuffer[delayNum] / 4 + sampleBuffer[sampleNum] / 2;
     outputBuffer[i + 1] = outputBuffer[i];
 
     updateDelay(holdNum);
+
     if (sampleBool) {
       updateSample(delayBuffer[delayNum]);
     }
-    else
+    else {
       sampleNum += samplerate;
-    sampleBuffer[sampleNum] -= sampleBuffer[sampleNum] * sub;
+    }
   }
 
   int16_t *p = outputQueue.getBuffer();
@@ -137,29 +136,19 @@ void checkLen() {
 void updateDelay(short int in) {
   for (short int i = 0; i < delayRate; i++) {
     if (delayNum >= delayMax)
-      delayNum = delayNum - delayMax;
-    if(in > 0)
-       knockDown = .3;
-    else
-      knockDown = 0;
-      
-    delayBuffer[delayNum] = .8 * ((float)(feedback-knockDown) * delayBuffer[delayNum] + in);
+      delayNum = delayNum % delayMax;
+
+    delayBuffer[delayNum] = (feedback * .5 * delayBuffer[delayNum] + .5 * in);
     delayNum++;
   }
 }
 
-
 void updateSample(short int in) {
   for (short int i = 0; i < samplerate; i++) {
-    if (sampleNum >= delayMax)
-      sampleNum = sampleNum - delayMax;
-    
-    if(in > 0)
-       knockDown = .3;
-    else
-      knockDown = 0;
+    if (sampleNum >= sampleLen)
+      sampleNum = sampleNum - sampleLen;
 
-    sampleBuffer[sampleNum] = .8*((float)(1-knockDown)*sampleBuffer[sampleNum] + in);
+    sampleBuffer[sampleNum] = (.6 * sampleBuffer[sampleNum] + .4 * in);
     sampleNum++;
   }
 }
@@ -171,7 +160,7 @@ void resetBuffer() {
 }
 
 void loop() {
-  if(resetBool){
-    resetBuffer();9
+  if (resetBool) {
+    resetBuffer();
   }
 }

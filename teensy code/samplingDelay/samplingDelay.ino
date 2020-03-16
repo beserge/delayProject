@@ -28,8 +28,8 @@ short int input = 0;
 const short int delayMax = 15000;
 short int sampleBuffer [delayMax];
 float delayBuffer[delayMax];
-short int delayNum = 0;
-short int delayRate = 1;
+float delayNum = 0;
+float delayRate = 1;
 bool sampleBool = false;
 short int sampleNum = 0;
 short int sampleLen = delayMax;
@@ -39,7 +39,7 @@ float knockDown = 0;
 
 bool resetBool = false;
 
-int samplerate = 0;
+short int samplerate = 0;
 short int sampleButton = 2;
 short int resetButton = 8;
 int modCount = 0;
@@ -92,7 +92,9 @@ void inInterrupt() {
   //aka 20 and 21
   feedback = ((float)(adc->analogRead(A5)) / 2050);
   delayRate = map(adc->analogRead (A4), 0, 8535, 1, 40);
-  samplerate = map(adc->analogRead (A9), 0, 8535, 1, 20);
+  //delayRate = 4.9;
+  //samplerate = adc->analogRead (A9)/2050;
+  samplerate = 2.0;
   sampleBool = digitalRead(sampleButton);
   resetBool = digitalRead(resetButton);
 }
@@ -104,13 +106,14 @@ void getNextOutputBlock() {
 
     short int holdNum = outputBuffer[i];
 
-    outputBuffer[i] = outputBuffer[i] / 4 + delayBuffer[delayNum] / 4 + sampleBuffer[sampleNum] / 2;
+    //outputBuffer[i] = outputBuffer[i] / 4 + delayBuffer[delayNum] / 4 + sampleBuffer[sampleNum] / 2;
+    outputBuffer[i] = outputBuffer[i] / 4 + delayBuffer[int(floor(delayNum))] / 4 + sampleBuffer[sampleNum] / 2;
     outputBuffer[i + 1] = outputBuffer[i];
 
     updateDelay(holdNum);
 
     if (sampleBool) {
-      updateSample(delayBuffer[delayNum]);
+      updateSample(delayBuffer[int(floor(delayNum))]);
     }
     else {
       sampleNum += samplerate;
@@ -121,6 +124,7 @@ void getNextOutputBlock() {
   memcpy(p, outputBuffer, 256);
   outputQueue.playBuffer();
 }
+
 
 
 void checkLen() {
@@ -136,11 +140,12 @@ void checkLen() {
 void updateDelay(short int in) {
   for (short int i = 0; i < delayRate; i++) {
     if (delayNum >= delayMax)
-      delayNum = delayNum % delayMax;
+      delayNum = delayNum - delayMax;
 
-    delayBuffer[delayNum] = (feedback * .5 * delayBuffer[delayNum] + .5 * in);
+    delayBuffer[int(floor(delayNum))] = (feedback * .5 * delayBuffer[int(floor(delayNum))] + .5 * in);
     delayNum++;
   }
+  delayNum += delayRate - floor(delayRate);
 }
 
 void updateSample(short int in) {
